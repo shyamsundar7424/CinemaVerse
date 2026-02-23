@@ -4,7 +4,7 @@ import axios from 'axios';
 import { API_BASE } from '../utils/api';
 import Spinner from '../components/Spinner';
 import MovieCard from '../components/MovieCard';
-import { Play, Download, ArrowLeft, Star, Calendar, Tag, Zap, Shield } from 'lucide-react';
+import { Play, Download, ArrowLeft, Star, Calendar, Tag, Zap, Shield, X, Tv, List } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const MovieDetail = () => {
@@ -12,6 +12,7 @@ const MovieDetail = () => {
     const [movie, setMovie] = useState(null);
     const [loading, setLoading] = useState(true);
     const [related, setRelated] = useState([]);
+    const [showTrailer, setShowTrailer] = useState(false);
 
     useEffect(() => {
         const fetch = async () => {
@@ -55,11 +56,12 @@ const MovieDetail = () => {
 
     const rating = movie.rating ? movie.rating.replace('/10', '') : '8.0';
     const year = movie.year || new Date(movie.createdAt).getFullYear();
+    const isWebSeries = movie.contentType === 'Web Series';
+    const hasEpisodes = isWebSeries && movie.episodes && movie.episodes.length > 0;
 
     // Render stars
     const ratingNum = parseFloat(rating) || 8;
     const fullStars = Math.floor(ratingNum / 2);
-    const hasHalf = (ratingNum / 2) - fullStars >= 0.5;
 
     return (
         <div style={{ paddingBottom: 60 }}>
@@ -138,6 +140,18 @@ const MovieDetail = () => {
                 >
                     {/* Meta badges */}
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                        {isWebSeries && (
+                            <span style={{
+                                display: 'inline-flex', alignItems: 'center', gap: 6,
+                                background: 'linear-gradient(135deg, rgba(0,255,170,0.3), rgba(0,212,255,0.2))',
+                                border: '1px solid rgba(0,255,170,0.4)', borderRadius: 50,
+                                padding: '6px 14px', fontSize: '0.8rem', fontWeight: 700,
+                                fontFamily: "'Outfit', sans-serif", color: '#00ffaa',
+                            }}>
+                                <Tv style={{ width: 13, height: 13 }} />
+                                Web Series
+                            </span>
+                        )}
                         <span style={{
                             display: 'inline-flex', alignItems: 'center', gap: 6,
                             background: 'linear-gradient(135deg, rgba(168,85,247,0.3), rgba(0,212,255,0.3))',
@@ -214,75 +228,161 @@ const MovieDetail = () => {
                         </div>
                     )}
 
-                    {/* ── Trailer Button ───────────────────────── */}
-                    <a
-                        href={movie.movieLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{
-                            display: 'inline-flex', alignItems: 'center', gap: 10,
-                            padding: '13px 28px', borderRadius: 50,
-                            background: 'rgba(255,255,255,0.06)',
-                            border: '1.5px solid rgba(255,255,255,0.15)',
-                            color: '#fff', textDecoration: 'none',
-                            fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '0.95rem',
-                            backdropFilter: 'blur(12px)',
-                            alignSelf: 'flex-start',
-                            transition: 'all 0.25s',
-                        }}
-                        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.12)'; e.currentTarget.style.borderColor = 'rgba(168,85,247,0.5)'; }}
-                        onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)'; }}
-                    >
-                        <Play style={{ width: 18, height: 18, fill: 'currentColor' }} />
-                        ▶ Watch Trailer
-                    </a>
+                    {/* ── Watch Trailer Button ──────────────────── */}
+                    {(movie.trailerLink || movie.movieLink) && (
+                        <button
+                            onClick={() => setShowTrailer(true)}
+                            style={{
+                                display: 'inline-flex', alignItems: 'center', gap: 10,
+                                padding: '13px 28px', borderRadius: 50,
+                                background: 'rgba(255,255,255,0.06)',
+                                border: '1.5px solid rgba(255,255,255,0.15)',
+                                color: '#fff',
+                                fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '0.95rem',
+                                backdropFilter: 'blur(12px)',
+                                alignSelf: 'flex-start',
+                                transition: 'all 0.25s',
+                                cursor: 'pointer',
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.12)'; e.currentTarget.style.borderColor = 'rgba(168,85,247,0.5)'; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)'; }}
+                        >
+                            <Play style={{ width: 18, height: 18, fill: 'currentColor' }} />
+                            ▶ Watch Trailer
+                        </button>
+                    )}
 
-                    {/* ── Download Buttons ─────────────────────── */}
-                    <div>
-                        <p style={{
-                            fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.15em',
-                            color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', marginBottom: 16,
-                            fontFamily: "'Outfit', sans-serif",
-                        }}>Download Options</p>
-
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-
-                            {/* Button 1: Download Movie — purple/blue */}
-                            <div>
-                                <a
-                                    href={movie.movieLink}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="btn-download-primary btn-ripple"
-                                    style={{ width: '100%', justifyContent: 'center', padding: '16px 24px', fontSize: '1.05rem' }}
-                                >
-                                    <Download style={{ width: 20, height: 20 }} />
-                                    Download Movie
-                                </a>
+                    {/* ── Download / Episodes Section ────────────── */}
+                    {hasEpisodes ? (
+                        /* ── EPISODES LIST (Web Series) ──────────── */
+                        <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+                                <List style={{ width: 16, height: 16, color: '#00ffaa' }} />
+                                <p style={{
+                                    fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.15em',
+                                    color: '#00ffaa', textTransform: 'uppercase',
+                                    fontFamily: "'Outfit', sans-serif",
+                                }}>Episodes ({movie.episodes.length})</p>
                             </div>
 
-                            {/* Button 2: Fast Server — pink/orange */}
-                            <div>
-                                <a
-                                    href={movie.movieLink}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="btn-download-fast btn-ripple"
-                                    style={{ width: '100%', justifyContent: 'center', padding: '16px 24px', fontSize: '1.05rem' }}
-                                >
-                                    <Zap style={{ width: 20, height: 20 }} />
-                                    Download (Fast Server)
-                                </a>
-                                <p style={{
-                                    textAlign: 'center', marginTop: 8,
-                                    color: 'rgba(255,255,255,0.35)', fontSize: '0.75rem',
-                                    fontStyle: 'italic', fontFamily: "'Inter', sans-serif",
-                                }}>
-                                    Support us by using this link
-                                </p>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                                {movie.episodes.map((ep, idx) => (
+                                    <motion.div
+                                        key={idx}
+                                        initial={{ opacity: 0, y: 12 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ delay: idx * 0.05 }}
+                                        className="glass-card"
+                                        style={{ padding: '16px 20px' }}
+                                    >
+                                        <div style={{
+                                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                            marginBottom: (ep.downloadLinkFast || ep.downloadLinkNormal) ? 12 : 0,
+                                            flexWrap: 'wrap', gap: 8,
+                                        }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                                <span style={{
+                                                    width: 32, height: 32, borderRadius: 8,
+                                                    background: 'linear-gradient(135deg, rgba(0,255,170,0.2), rgba(0,212,255,0.15))',
+                                                    border: '1px solid rgba(0,255,170,0.3)',
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                    fontFamily: "'Outfit', sans-serif", fontWeight: 900, fontSize: '0.85rem',
+                                                    color: '#00ffaa', flexShrink: 0,
+                                                }}>
+                                                    {ep.episodeNumber}
+                                                </span>
+                                                <span style={{
+                                                    fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '0.95rem',
+                                                }}>
+                                                    {ep.title}
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        {(ep.downloadLinkFast || ep.downloadLinkNormal) && (
+                                            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                                                {ep.downloadLinkNormal && (
+                                                    <a
+                                                        href={ep.downloadLinkNormal}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="btn-download-primary btn-ripple"
+                                                        style={{ flex: 1, minWidth: 140, justifyContent: 'center', padding: '10px 16px', fontSize: '0.85rem' }}
+                                                    >
+                                                        <Download style={{ width: 15, height: 15 }} />
+                                                        Normal Server
+                                                    </a>
+                                                )}
+                                                {ep.downloadLinkFast && (
+                                                    <a
+                                                        href={ep.downloadLinkFast}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="btn-download-fast btn-ripple"
+                                                        style={{ flex: 1, minWidth: 140, justifyContent: 'center', padding: '10px 16px', fontSize: '0.85rem' }}
+                                                    >
+                                                        <Zap style={{ width: 15, height: 15 }} />
+                                                        Fast Server
+                                                    </a>
+                                                )}
+                                            </div>
+                                        )}
+                                    </motion.div>
+                                ))}
                             </div>
                         </div>
-                    </div>
+                    ) : (
+                        /* ── SINGLE DOWNLOAD (Movie) ──────────────── */
+                        <div>
+                            <p style={{
+                                fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.15em',
+                                color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', marginBottom: 16,
+                                fontFamily: "'Outfit', sans-serif",
+                            }}>Download Options</p>
+
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+                                {/* Button 1: Download Movie — purple/blue */}
+                                {(movie.downloadLink || movie.movieLink) && (
+                                    <div>
+                                        <a
+                                            href={movie.downloadLink || movie.movieLink}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="btn-download-primary btn-ripple"
+                                            style={{ width: '100%', justifyContent: 'center', padding: '16px 24px', fontSize: '1.05rem' }}
+                                        >
+                                            <Download style={{ width: 20, height: 20 }} />
+                                            Download Movie
+                                        </a>
+                                    </div>
+                                )}
+
+                                {/* Button 2: Fast Server — pink/orange */}
+                                {movie.fastDownloadLink && (
+                                    <div>
+                                        <a
+                                            href={movie.fastDownloadLink}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="btn-download-fast btn-ripple"
+                                            style={{ width: '100%', justifyContent: 'center', padding: '16px 24px', fontSize: '1.05rem' }}
+                                        >
+                                            <Zap style={{ width: 20, height: 20 }} />
+                                            Download (Fast Server)
+                                        </a>
+                                        <p style={{
+                                            textAlign: 'center', marginTop: 8,
+                                            color: 'rgba(255,255,255,0.35)', fontSize: '0.75rem',
+                                            fontStyle: 'italic', fontFamily: "'Inter', sans-serif",
+                                        }}>
+                                            Support us by using this link
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
 
                     {/* ── Disclaimer ───────────────────────────── */}
                     <div style={{
@@ -318,7 +418,7 @@ const MovieDetail = () => {
                         }} />
                         <h2 style={{
                             fontFamily: "'Outfit', sans-serif", fontWeight: 800, fontSize: '1.3rem',
-                        }}>More {movie.category} Movies</h2>
+                        }}>More {movie.category} {isWebSeries ? 'Shows' : 'Movies'}</h2>
                         <div style={{
                             flex: 1, height: 1,
                             background: 'linear-gradient(90deg, rgba(168,85,247,0.3), transparent)',
@@ -343,6 +443,66 @@ const MovieDetail = () => {
                     </div>
                 </motion.div>
             )}
+
+            {/* ── Trailer Modal ──────────────────────────── */}
+            {showTrailer && (() => {
+                const src = movie.trailerLink || movie.movieLink || '';
+                // Convert YouTube watch URL to embed URL
+                let embedSrc = src;
+                const ytMatch = src.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/);
+                if (ytMatch) embedSrc = `https://www.youtube.com/embed/${ytMatch[1]}?autoplay=1`;
+                const isVideo = /\.(mp4|webm|ogg)(\?.*)?$/i.test(src);
+                return (
+                    <div
+                        onClick={() => setShowTrailer(false)}
+                        style={{
+                            position: 'fixed', inset: 0, zIndex: 9999,
+                            background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            padding: 20,
+                        }}
+                    >
+                        <div
+                            onClick={e => e.stopPropagation()}
+                            style={{
+                                position: 'relative', width: '100%', maxWidth: 900,
+                                aspectRatio: '16/9', borderRadius: 16, overflow: 'hidden',
+                                background: '#000',
+                                boxShadow: '0 0 60px rgba(168,85,247,0.3)',
+                            }}
+                        >
+                            <button
+                                onClick={() => setShowTrailer(false)}
+                                style={{
+                                    position: 'absolute', top: 12, right: 12, zIndex: 10,
+                                    width: 36, height: 36, borderRadius: '50%',
+                                    background: 'rgba(0,0,0,0.6)', border: '1.5px solid rgba(255,255,255,0.2)',
+                                    color: '#fff', cursor: 'pointer',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                }}
+                            >
+                                <X style={{ width: 18, height: 18 }} />
+                            </button>
+                            {isVideo ? (
+                                <video
+                                    src={src}
+                                    controls
+                                    autoPlay
+                                    style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                                />
+                            ) : (
+                                <iframe
+                                    src={embedSrc}
+                                    title="Trailer"
+                                    allow="autoplay; encrypted-media; fullscreen"
+                                    allowFullScreen
+                                    style={{ width: '100%', height: '100%', border: 'none' }}
+                                />
+                            )}
+                        </div>
+                    </div>
+                );
+            })()}
         </div>
     );
 };

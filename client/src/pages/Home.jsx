@@ -4,6 +4,8 @@ import { Link } from 'react-router-dom';
 import { API_BASE } from '../utils/api';
 import MovieCard from '../components/MovieCard';
 import Spinner from '../components/Spinner';
+import AdBanner from '../components/AdBanner';
+import ExternalAd from '../components/ExternalAd';
 import { Search, Play, Download, ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion } from 'framer-motion';
 
@@ -125,6 +127,9 @@ const Home = () => {
                 </motion.div>
             )}
 
+            {/* ── Ad Banner 1 — between hero and search ── */}
+            <AdBanner />
+
             {/* ── Search ───────────────────────────────────── */}
             <div style={{ position: 'relative', maxWidth: 520, margin: '0 auto', width: '100%' }}>
                 <Search style={{
@@ -188,6 +193,9 @@ const Home = () => {
                     ><ChevronRight style={{ width: 18, height: 18 }} /></button>
                 </div>
             </div>
+
+            {/* ── External Ad — between categories and movie grid ── */}
+            <ExternalAd />
 
             {/* ── Movie Grid ───────────────────────────────── */}
             <div>

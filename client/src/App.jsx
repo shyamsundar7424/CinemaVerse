@@ -12,6 +12,8 @@ import Categories from './pages/Categories';
 import About from './pages/About';
 import Help from './pages/Help';
 import Background from './components/Background';
+import AdBanner from './components/AdBanner';
+import ExternalAd from './components/ExternalAd';
 
 // Theme context
 export const ThemeContext = createContext({ dark: true, toggle: () => { } });
@@ -73,9 +75,22 @@ function App() {
         <div className="relative min-h-screen">
           <Background />
           <Navbar />
+          <ExternalAd />
           <main className="container mx-auto px-3 sm:px-4 py-4 md:py-8 relative z-10">
             <AnimatedRoutes />
           </main>
+
+          {/* ── Footer Ad Strip ─────────────────────── */}
+          <div style={{
+            width: '100%',
+            borderTop: '1px solid rgba(255,255,255,0.05)',
+            paddingBottom: 12,
+            background: 'rgba(0,0,0,0.2)',
+            backdropFilter: 'blur(10px)',
+          }}>
+            <AdBanner />
+          </div>
+
           <ToastContainer
             theme={dark ? 'dark' : 'light'}
             position="bottom-right"

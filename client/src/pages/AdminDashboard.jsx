@@ -6,10 +6,12 @@ import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Plus, Edit, Trash2, Upload, X, LogOut, Film, Shield,
-    BarChart2, Clock, Tag, Link as LinkIcon, Image, CheckCircle, AlertCircle
+    BarChart2, Clock, Tag, Link as LinkIcon, Image, CheckCircle, AlertCircle,
+    Play, Zap, Tv, List
 } from 'lucide-react';
 
 const CATEGORIES = ['Action', 'Comedy', 'Drama', 'Horror', 'Sci-Fi', 'Documentary', 'Anime'];
+const CONTENT_TYPES = ['Movie', 'Web Series'];
 
 const CAT_COLORS = {
     Action: '#ff2d78', Comedy: '#ffd700', Drama: '#00d4ff',
@@ -54,10 +56,23 @@ const CatBar = ({ cat, count, total }) => {
     );
 };
 
+/* ── Empty Episode template ───────────────────── */
+const emptyEpisode = () => ({
+    episodeNumber: 1,
+    title: '',
+    downloadLinkFast: '',
+    downloadLinkNormal: '',
+});
+
 /* ── Main Component ───────────────────────────── */
 const AdminDashboard = () => {
     const [movies, setMovies] = useState([]);
-    const [formData, setFormData] = useState({ title: '', category: 'Action', description: '', movieLink: '', year: '', rating: '' });
+    const [formData, setFormData] = useState({
+        title: '', category: 'Action', contentType: 'Movie',
+        description: '', trailerLink: '', downloadLink: '', fastDownloadLink: '',
+        year: '', rating: '',
+    });
+    const [episodes, setEpisodes] = useState([emptyEpisode()]);
     const [imageFile, setImageFile] = useState(null);
     const [imagePreview, setImagePreview] = useState(null);
     const [editingId, setEditingId] = useState(null);
@@ -105,12 +120,44 @@ const AdminDashboard = () => {
         reader.readAsDataURL(file);
     };
 
+    /* ── Episode Helpers ──────────────────────────── */
+    const handleEpisodeChange = (index, field, value) => {
+        const updated = [...episodes];
+        updated[index] = { ...updated[index], [field]: value };
+        setEpisodes(updated);
+    };
+
+    const addEpisode = () => {
+        setEpisodes([...episodes, {
+            episodeNumber: episodes.length + 1,
+            title: `Episode ${episodes.length + 1}`,
+            downloadLinkFast: '',
+            downloadLinkNormal: '',
+        }]);
+    };
+
+    const removeEpisode = (index) => {
+        if (episodes.length <= 1) { toast.warning('Web Series must have at least one episode'); return; }
+        const updated = episodes.filter((_, i) => i !== index);
+        // Re-number episodes
+        updated.forEach((ep, i) => { ep.episodeNumber = i + 1; });
+        setEpisodes(updated);
+    };
+
+    /* ── Submit ────────────────────────────────────── */
     const handleSubmit = async (e) => {
         e.preventDefault();
         const token = localStorage.getItem('token');
         const data = new FormData();
-        Object.entries(formData).forEach(([k, v]) => { if (v) data.append(k, v); });
+
+        // Append standard fields
+        Object.entries(formData).forEach(([k, v]) => { if (v !== undefined && v !== null) data.append(k, v); });
         if (imageFile) data.append('image', imageFile);
+
+        // If Web Series, append episodes as JSON
+        if (formData.contentType === 'Web Series') {
+            data.append('episodes', JSON.stringify(episodes));
+        }
 
         setIsLoading(true);
         try {
@@ -121,7 +168,7 @@ const AdminDashboard = () => {
             } else {
                 if (!imageFile) { toast.error('Please select a poster image'); setIsLoading(false); return; }
                 await axios.post(`${API_BASE}/api/movies`, data, cfg);
-                toast.success('🎬 Movie added to database!');
+                toast.success('🎬 Added to database!');
             }
             resetForm();
             fetchMovies();
@@ -134,7 +181,12 @@ const AdminDashboard = () => {
     };
 
     const resetForm = () => {
-        setFormData({ title: '', category: 'Action', description: '', movieLink: '', year: '', rating: '' });
+        setFormData({
+            title: '', category: 'Action', contentType: 'Movie',
+            description: '', trailerLink: '', downloadLink: '', fastDownloadLink: '',
+            year: '', rating: '',
+        });
+        setEpisodes([emptyEpisode()]);
         setImageFile(null); setImagePreview(null); setEditingId(null);
         if (fileInputRef.current) fileInputRef.current.value = '';
     };
@@ -142,9 +194,23 @@ const AdminDashboard = () => {
     const handleEdit = (movie) => {
         setFormData({
             title: movie.title, category: movie.category,
-            description: movie.description, movieLink: movie.movieLink,
+            contentType: movie.contentType || 'Movie',
+            description: movie.description,
+            trailerLink: movie.trailerLink || '',
+            downloadLink: movie.downloadLink || movie.movieLink || '',
+            fastDownloadLink: movie.fastDownloadLink || '',
             year: movie.year || '', rating: movie.rating || '',
         });
+        if (movie.contentType === 'Web Series' && movie.episodes && movie.episodes.length > 0) {
+            setEpisodes(movie.episodes.map(ep => ({
+                episodeNumber: ep.episodeNumber,
+                title: ep.title,
+                downloadLinkFast: ep.downloadLinkFast || '',
+                downloadLinkNormal: ep.downloadLinkNormal || '',
+            })));
+        } else {
+            setEpisodes([emptyEpisode()]);
+        }
         setEditingId(movie._id);
         setImagePreview(movie.image.startsWith('/uploads/') ? `${API_BASE}${movie.image}` : movie.image);
         setImageFile(null);
@@ -168,12 +234,19 @@ const AdminDashboard = () => {
         toast.info('Logged out successfully');
     };
 
+    const isWebSeries = formData.contentType === 'Web Series';
+
     /* ── NAV TABS ──────────────────────────────── */
     const tabs = [
         { id: 'dashboard', label: 'Dashboard', icon: <BarChart2 style={{ width: 16, height: 16 }} /> },
         { id: 'add', label: editingId ? 'Edit Movie' : 'Add Movie', icon: <Plus style={{ width: 16, height: 16 }} /> },
         { id: 'movies', label: `All Movies (${movies.length})`, icon: <Film style={{ width: 16, height: 16 }} /> },
     ];
+
+    /* ── Shared input style ────────────────────── */
+    const episodeInputStyle = {
+        flex: 1, minWidth: 0,
+    };
 
     return (
         <div style={{ paddingBottom: 60 }}>
@@ -259,6 +332,10 @@ const AdminDashboard = () => {
                                 label="Total Movies" value={movies.length} accent="#a855f7"
                             />
                             <StatCard
+                                icon={<Tv style={{ width: 22, height: 22, color: '#00ffaa' }} />}
+                                label="Web Series" value={movies.filter(m => m.contentType === 'Web Series').length} accent="#00ffaa"
+                            />
+                            <StatCard
                                 icon={<Tag style={{ width: 22, height: 22, color: '#00d4ff' }} />}
                                 label="Categories" value={CATEGORIES.length} accent="#00d4ff"
                             />
@@ -270,12 +347,6 @@ const AdminDashboard = () => {
                                     return (Date.now() - d.getTime()) < 7 * 24 * 60 * 60 * 1000;
                                 }).length}
                                 accent="#ffd700"
-                            />
-                            <StatCard
-                                icon={<BarChart2 style={{ width: 22, height: 22, color: '#ff2d78' }} />}
-                                label="Most Popular"
-                                value={Object.entries(catCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || '-'}
-                                accent="#ff2d78"
                             />
                         </div>
 
@@ -316,11 +387,21 @@ const AdminDashboard = () => {
                                                     fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '0.88rem',
                                                     overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
                                                 }}>{movie.title}</p>
-                                                <span style={{
-                                                    fontSize: '0.68rem', fontWeight: 700,
-                                                    color: CAT_COLORS[movie.category] || '#a855f7',
-                                                    textTransform: 'uppercase', letterSpacing: '0.08em',
-                                                }}>{movie.category}</span>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                    <span style={{
+                                                        fontSize: '0.68rem', fontWeight: 700,
+                                                        color: CAT_COLORS[movie.category] || '#a855f7',
+                                                        textTransform: 'uppercase', letterSpacing: '0.08em',
+                                                    }}>{movie.category}</span>
+                                                    {movie.contentType === 'Web Series' && (
+                                                        <span style={{
+                                                            fontSize: '0.6rem', fontWeight: 700,
+                                                            padding: '1px 6px', borderRadius: 50,
+                                                            background: 'rgba(0,255,170,0.12)', border: '1px solid rgba(0,255,170,0.3)',
+                                                            color: '#00ffaa',
+                                                        }}>SERIES</span>
+                                                    )}
+                                                </div>
                                             </div>
                                             <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                                                 <button onClick={() => handleEdit(movie)}
@@ -386,12 +467,50 @@ const AdminDashboard = () => {
                                 </div>
 
                                 <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+                                    {/* ── Content Type Toggle ───────────────── */}
+                                    <div>
+                                        <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                                            <Tv style={{ width: 13, height: 13, color: '#00ffaa' }} />
+                                            Content Type *
+                                        </label>
+                                        <div style={{ display: 'flex', gap: 8 }}>
+                                            {CONTENT_TYPES.map(type => (
+                                                <button
+                                                    key={type}
+                                                    type="button"
+                                                    onClick={() => setFormData({ ...formData, contentType: type })}
+                                                    style={{
+                                                        flex: 1, padding: '12px 16px', borderRadius: 12,
+                                                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                                                        background: formData.contentType === type
+                                                            ? type === 'Movie'
+                                                                ? 'linear-gradient(135deg, rgba(168,85,247,0.3), rgba(0,212,255,0.2))'
+                                                                : 'linear-gradient(135deg, rgba(0,255,170,0.3), rgba(0,212,255,0.2))'
+                                                            : 'rgba(255,255,255,0.04)',
+                                                        border: formData.contentType === type
+                                                            ? type === 'Movie'
+                                                                ? '1.5px solid rgba(168,85,247,0.5)'
+                                                                : '1.5px solid rgba(0,255,170,0.5)'
+                                                            : '1.5px solid rgba(255,255,255,0.08)',
+                                                        color: formData.contentType === type ? '#fff' : 'rgba(255,255,255,0.5)',
+                                                        fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '0.9rem',
+                                                        cursor: 'pointer', transition: 'all 0.25s',
+                                                    }}
+                                                >
+                                                    {type === 'Movie' ? <Film style={{ width: 16, height: 16 }} /> : <Tv style={{ width: 16, height: 16 }} />}
+                                                    {type}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
                                     {/* Row: Title + Category */}
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }} className="form-row">
                                         <div>
-                                            <label className="form-label">Movie Title *</label>
+                                            <label className="form-label">Title *</label>
                                             <input name="title" value={formData.title} onChange={handleChange}
-                                                placeholder="e.g. Interstellar" className="input-field" required />
+                                                placeholder={isWebSeries ? 'e.g. Breaking Bad' : 'e.g. Interstellar'} className="input-field" required />
                                         </div>
                                         <div>
                                             <label className="form-label">Category *</label>
@@ -419,22 +538,118 @@ const AdminDashboard = () => {
                                         </div>
                                     </div>
 
-                                    {/* Download/Stream Link */}
+                                    {/* Trailer Link */}
                                     <div>
                                         <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                            <LinkIcon style={{ width: 13, height: 13, color: '#a855f7' }} />
-                                            Download / Stream Link *
+                                            <Play style={{ width: 13, height: 13, color: '#00d4ff' }} />
+                                            Watch Trailer Link
                                         </label>
-                                        <input name="movieLink" value={formData.movieLink} onChange={handleChange}
-                                            placeholder="https://example.com/movie-link" className="input-field" required />
+                                        <input name="trailerLink" value={formData.trailerLink} onChange={handleChange}
+                                            placeholder="YouTube embed URL or MP4 link" className="input-field" />
                                     </div>
+
+                                    {/* ── Conditional: Movie Download Links OR Episode Inputs ── */}
+                                    {!isWebSeries ? (
+                                        <>
+                                            {/* Download Link */}
+                                            <div>
+                                                <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                    <LinkIcon style={{ width: 13, height: 13, color: '#a855f7' }} />
+                                                    Download Movie Link *
+                                                </label>
+                                                <input name="downloadLink" value={formData.downloadLink} onChange={handleChange}
+                                                    placeholder="https://example.com/download" className="input-field" required />
+                                            </div>
+
+                                            {/* Fast Download Link */}
+                                            <div>
+                                                <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                    <Zap style={{ width: 13, height: 13, color: '#ffd700' }} />
+                                                    Download (Fast Server) Link
+                                                </label>
+                                                <input name="fastDownloadLink" value={formData.fastDownloadLink} onChange={handleChange}
+                                                    placeholder="https://fast-server.com/download" className="input-field" />
+                                            </div>
+                                        </>
+                                    ) : (
+                                        /* ── Episodes Section ──────────────────── */
+                                        <div>
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                                                <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 0 }}>
+                                                    <List style={{ width: 13, height: 13, color: '#00ffaa' }} />
+                                                    Episodes ({episodes.length})
+                                                </label>
+                                                <button type="button" onClick={addEpisode}
+                                                    style={{
+                                                        display: 'flex', alignItems: 'center', gap: 6,
+                                                        padding: '6px 14px', borderRadius: 50,
+                                                        background: 'rgba(0,255,170,0.1)', border: '1px solid rgba(0,255,170,0.3)',
+                                                        color: '#00ffaa', fontFamily: "'Outfit', sans-serif",
+                                                        fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer',
+                                                    }}>
+                                                    <Plus style={{ width: 13, height: 13 }} /> Add Episode
+                                                </button>
+                                            </div>
+
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                                                {episodes.map((ep, idx) => (
+                                                    <motion.div
+                                                        key={idx}
+                                                        initial={{ opacity: 0, y: 10 }}
+                                                        animate={{ opacity: 1, y: 0 }}
+                                                        style={{
+                                                            padding: '16px 18px', borderRadius: 14,
+                                                            background: 'rgba(0,255,170,0.03)',
+                                                            border: '1px solid rgba(0,255,170,0.12)',
+                                                        }}
+                                                    >
+                                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                                                            <span style={{
+                                                                fontFamily: "'Outfit', sans-serif", fontWeight: 800, fontSize: '0.85rem',
+                                                                color: '#00ffaa',
+                                                            }}>Episode {ep.episodeNumber}</span>
+                                                            <button type="button" onClick={() => removeEpisode(idx)}
+                                                                style={{
+                                                                    width: 26, height: 26, borderRadius: 8,
+                                                                    background: 'rgba(255,45,120,0.1)', border: '1px solid rgba(255,45,120,0.25)',
+                                                                    color: '#ff2d78', cursor: 'pointer',
+                                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                                }}>
+                                                                <X style={{ width: 12, height: 12 }} />
+                                                            </button>
+                                                        </div>
+
+                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                                            <input
+                                                                value={ep.title} placeholder="Episode title"
+                                                                onChange={e => handleEpisodeChange(idx, 'title', e.target.value)}
+                                                                className="input-field" style={episodeInputStyle}
+                                                            />
+                                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }} className="form-row">
+                                                                <input
+                                                                    value={ep.downloadLinkFast} placeholder="Fast Server Link"
+                                                                    onChange={e => handleEpisodeChange(idx, 'downloadLinkFast', e.target.value)}
+                                                                    className="input-field" style={episodeInputStyle}
+                                                                />
+                                                                <input
+                                                                    value={ep.downloadLinkNormal} placeholder="Normal Server Link"
+                                                                    onChange={e => handleEpisodeChange(idx, 'downloadLinkNormal', e.target.value)}
+                                                                    className="input-field" style={episodeInputStyle}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </motion.div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
 
                                     {/* Description */}
                                     <div>
-                                        <label className="form-label">Movie Description *</label>
+                                        <label className="form-label">Description *</label>
                                         <textarea
                                             name="description" value={formData.description} onChange={handleChange}
-                                            placeholder="Write a compelling description of the movie..."
+                                            placeholder={isWebSeries ? 'Write a compelling description of the series...' : 'Write a compelling description of the movie...'}
                                             className="input-field"
                                             style={{ minHeight: 130, resize: 'vertical' }}
                                             required
@@ -445,7 +660,7 @@ const AdminDashboard = () => {
                                     <div>
                                         <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                             <Image style={{ width: 13, height: 13, color: '#a855f7' }} />
-                                            Movie Poster {!editingId && '*'}
+                                            Poster {!editingId && '*'}
                                         </label>
                                         <div
                                             onClick={() => fileInputRef.current?.click()}
@@ -496,9 +711,9 @@ const AdminDashboard = () => {
                                             {isLoading ? (
                                                 <><svg style={{ width: 18, height: 18, animation: 'spin 1s linear infinite' }} viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#fff" strokeWidth="3" strokeDasharray="31.4" strokeDashoffset="10" /></svg> Saving...</>
                                             ) : editingId ? (
-                                                <><CheckCircle style={{ width: 18, height: 18 }} /> Update Movie</>
+                                                <><CheckCircle style={{ width: 18, height: 18 }} /> Update {isWebSeries ? 'Series' : 'Movie'}</>
                                             ) : (
-                                                <><Plus style={{ width: 18, height: 18 }} /> Add Movie</>
+                                                <><Plus style={{ width: 18, height: 18 }} /> Add {isWebSeries ? 'Series' : 'Movie'}</>
                                             )}
                                         </button>
                                         {editingId && (
@@ -575,10 +790,10 @@ const AdminDashboard = () => {
 
                             {/* Table */}
                             <div style={{ overflowX: 'auto' }}>
-                                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 520 }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 580 }}>
                                     <thead>
                                         <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-                                            {['Poster', 'Title', 'Category', 'Year', 'Actions'].map(h => (
+                                            {['Poster', 'Title', 'Type', 'Category', 'Year', 'Actions'].map(h => (
                                                 <th key={h} style={{
                                                     padding: '10px 14px', textAlign: h === 'Actions' ? 'right' : 'left',
                                                     fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.12em',
@@ -608,6 +823,16 @@ const AdminDashboard = () => {
                                                     <p style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '0.9rem', maxWidth: 180, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
                                                         {movie.title}
                                                     </p>
+                                                </td>
+                                                <td style={{ padding: '10px 14px' }}>
+                                                    <span style={{
+                                                        padding: '3px 10px', borderRadius: 50, fontSize: '0.68rem', fontWeight: 700,
+                                                        background: movie.contentType === 'Web Series' ? 'rgba(0,255,170,0.1)' : 'rgba(168,85,247,0.1)',
+                                                        border: movie.contentType === 'Web Series' ? '1px solid rgba(0,255,170,0.3)' : '1px solid rgba(168,85,247,0.3)',
+                                                        color: movie.contentType === 'Web Series' ? '#00ffaa' : '#a855f7',
+                                                    }}>
+                                                        {movie.contentType === 'Web Series' ? 'Series' : 'Movie'}
+                                                    </span>
                                                 </td>
                                                 <td style={{ padding: '10px 14px' }}>
                                                     <span style={{
