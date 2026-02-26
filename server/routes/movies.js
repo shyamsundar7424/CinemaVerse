@@ -3,20 +3,18 @@ const router = express.Router();
 const Movie = require('../models/Movie');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
+const cloudinary = require('cloudinary').v2;
 
-// Configure Multer Storage
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, 'uploads/');
-    },
-    filename: (req, file, cb) => {
-        cb(null, `${Date.now()}-${file.originalname.replace(/\s+/g, '-')}`);
-    }
+// ── Cloudinary Configuration ────────────────────────
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// File Filter
+// ── Multer — memory storage (works on Vercel) ───────
+const storage = multer.memoryStorage();
+
 const fileFilter = (req, file, cb) => {
     const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
     if (allowedTypes.includes(file.mimetype)) {
@@ -27,12 +25,30 @@ const fileFilter = (req, file, cb) => {
 };
 
 const upload = multer({
-    storage: storage,
+    storage,
     limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
-    fileFilter: fileFilter
+    fileFilter,
 });
 
-// Middleware to verify Admin Token
+// ── Helper: upload buffer to Cloudinary ─────────────
+const uploadToCloudinary = (fileBuffer, mimetype) => {
+    return new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+            {
+                folder: 'cinemaverse',
+                resource_type: 'image',
+                format: mimetype.split('/')[1], // jpeg, png, webp
+            },
+            (error, result) => {
+                if (error) return reject(error);
+                resolve(result.secure_url);
+            }
+        );
+        stream.end(fileBuffer);
+    });
+};
+
+// ── Auth Middleware ──────────────────────────────────
 const auth = (req, res, next) => {
     const token = req.header('x-auth-token');
     if (!token) {
@@ -50,7 +66,7 @@ const auth = (req, res, next) => {
     }
 };
 
-// Get All Movies (Public)
+// ── GET All Movies (Public) ─────────────────────────
 router.get('/', async (req, res) => {
     try {
         const { search, category } = req.query;
@@ -72,7 +88,7 @@ router.get('/', async (req, res) => {
     }
 });
 
-// Get Single Movie (Public)
+// ── GET Single Movie (Public) ───────────────────────
 router.get('/:id', async (req, res) => {
     try {
         const movie = await Movie.findById(req.params.id);
@@ -89,7 +105,7 @@ router.get('/:id', async (req, res) => {
     }
 });
 
-// Add Movie (Admin)
+// ── POST — Add Movie (Admin) ────────────────────────
 router.post('/', [auth, upload.single('image')], async (req, res) => {
     try {
         const {
@@ -99,7 +115,7 @@ router.post('/', [auth, upload.single('image')], async (req, res) => {
             contentType, episodes
         } = req.body;
 
-        // ── Field validation ──────────────────────────────
+        // ── Field validation ────────────────────────
         const errors = [];
         if (!title || !title.trim()) errors.push('Title is required');
         if (!category || !category.trim()) errors.push('Category is required');
@@ -128,7 +144,13 @@ router.post('/', [auth, upload.single('image')], async (req, res) => {
             return res.status(400).json({ message: errors.join(', '), errors });
         }
 
-        const imageUrl = req.file ? `/uploads/${req.file.filename}` : req.body.image;
+        // ── Upload image to Cloudinary ──────────────
+        let imageUrl;
+        if (req.file) {
+            imageUrl = await uploadToCloudinary(req.file.buffer, req.file.mimetype);
+        } else {
+            imageUrl = req.body.image;
+        }
 
         const newMovie = new Movie({
             title: title.trim(),
@@ -160,7 +182,7 @@ router.post('/', [auth, upload.single('image')], async (req, res) => {
     }
 });
 
-// Update Movie (Admin)
+// ── PUT — Update Movie (Admin) ──────────────────────
 router.put('/:id', [auth, upload.single('image')], async (req, res) => {
     try {
         const {
@@ -173,13 +195,10 @@ router.put('/:id', [auth, upload.single('image')], async (req, res) => {
         let movie = await Movie.findById(req.params.id);
         if (!movie) return res.status(404).json({ message: 'Movie not found' });
 
+        // ── Upload new image to Cloudinary if provided ──
         let imageUrl = movie.image;
         if (req.file) {
-            if (movie.image.startsWith('/uploads/')) {
-                const oldPath = path.join(__dirname, '..', movie.image);
-                if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
-            }
-            imageUrl = `/uploads/${req.file.filename}`;
+            imageUrl = await uploadToCloudinary(req.file.buffer, req.file.mimetype);
         } else if (req.body.image) {
             imageUrl = req.body.image;
         }
@@ -227,17 +246,11 @@ router.put('/:id', [auth, upload.single('image')], async (req, res) => {
     }
 });
 
-// Delete Movie (Admin)
+// ── DELETE — Remove Movie (Admin) ───────────────────
 router.delete('/:id', auth, async (req, res) => {
     try {
         const movie = await Movie.findById(req.params.id);
         if (!movie) return res.status(404).json({ message: 'Movie not found' });
-
-        // Delete associated image file if local
-        if (movie.image.startsWith('/uploads/')) {
-            const filePath = path.join(__dirname, '..', movie.image);
-            if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-        }
 
         await Movie.findByIdAndDelete(req.params.id);
         console.log(`🗑️ Movie deleted: "${movie.title}" [ID: ${movie._id}]`);

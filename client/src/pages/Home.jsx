@@ -194,7 +194,7 @@ const Home = () => {
                 </div>
             </div>
 
-            {/* ── External Ad — between categories and movie grid ── */}
+            {/* ── Leaderboard Ad — between categories and movie grid ── */}
             <ExternalAd />
 
             {/* ── Movie Grid ───────────────────────────────── */}
@@ -233,6 +233,9 @@ const Home = () => {
                         </p>
                     </div>
                 )}
+
+                {/* ── Banner Ad — after movie grid ── */}
+                {!loading && movies.length > 0 && <AdBanner />}
             </div>
         </div>
     );

@@ -4,6 +4,8 @@ import axios from 'axios';
 import { API_BASE } from '../utils/api';
 import Spinner from '../components/Spinner';
 import MovieCard from '../components/MovieCard';
+import AdBanner from '../components/AdBanner';
+import ExternalAd from '../components/ExternalAd';
 import { Play, Download, ArrowLeft, Star, Calendar, Tag, Zap, Shield, X, Tv, List } from 'lucide-react';
 import { motion } from 'framer-motion';
 
@@ -14,6 +16,9 @@ const MovieDetail = () => {
     const [related, setRelated] = useState([]);
     const [showTrailer, setShowTrailer] = useState(false);
 
+    // Popunder ad is loaded lazily on first download click (see triggerAdAndOpen)
+
+    // ── Fetch movie data ──────────────────────────────────────────────────
     useEffect(() => {
         const fetch = async () => {
             try {
@@ -30,6 +35,56 @@ const MovieDetail = () => {
         };
         fetch();
     }, [id]);
+
+    const AD_SRC = 'https://pl24903236.effectivegatecpm.com/e1/8e/ab/e18eaba2032e03d99000fdfe3a73e005.js';
+    const AD_ID = '__effectivegate_ad__';
+
+    /**
+     * triggerAdAndOpen — fires the popunder ONLY on download button clicks.
+     *
+     * Pattern: remove old script → reinject fresh during the click gesture →
+     *   open download link once script loads → auto-remove script after 5 s
+     *   so no other page click can ever trigger the popunder.
+     *
+     * Why remove+reinject each time?
+     *   The script hooks click/open events when it first executes. By removing
+     *   it and re-injecting during the actual user click, we keep the active
+     *   window as short as possible (only during this download interaction).
+     *
+     * Why no 'noopener'?
+     *   The network overrides window.open(); 'noopener' bypasses that hook.
+     */
+    const triggerAdAndOpen = (e, href) => {
+        e.preventDefault();
+
+        const openLink = () => window.open(href, '_blank');
+
+        // 1. Remove any existing instance to reset the ad state
+        const old = document.getElementById(AD_ID);
+        if (old) old.remove();
+
+        // 2. Inject fresh script during active user-click gesture
+        const s = document.createElement('script');
+        s.id = AD_ID;
+        s.src = AD_SRC;
+        s.type = 'text/javascript';
+
+        s.onload = () => {
+            // 3. Open download link — overridden window.open fires popunder first
+            setTimeout(openLink, 80);
+
+            // 4. Auto-remove after 5 s — prevents non-download clicks firing ad
+            setTimeout(() => {
+                const el = document.getElementById(AD_ID);
+                if (el) el.remove();
+            }, 5000);
+        };
+
+        // Always open download link even if ad script fails
+        s.onerror = openLink;
+
+        document.body.appendChild(s);
+    };
 
     if (loading) return (
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
@@ -252,6 +307,9 @@ const MovieDetail = () => {
                         </button>
                     )}
 
+                    {/* ── Ad Banner — above download section ── */}
+                    <AdBanner />
+
                     {/* ── Download / Episodes Section ────────────── */}
                     {hasEpisodes ? (
                         /* ── EPISODES LIST (Web Series) ──────────── */
@@ -308,6 +366,7 @@ const MovieDetail = () => {
                                                         rel="noopener noreferrer"
                                                         className="btn-download-primary btn-ripple"
                                                         style={{ flex: 1, minWidth: 140, justifyContent: 'center', padding: '10px 16px', fontSize: '0.85rem' }}
+                                                        onClick={(e) => triggerAdAndOpen(e, ep.downloadLinkNormal)}
                                                     >
                                                         <Download style={{ width: 15, height: 15 }} />
                                                         Normal Server
@@ -320,6 +379,7 @@ const MovieDetail = () => {
                                                         rel="noopener noreferrer"
                                                         className="btn-download-fast btn-ripple"
                                                         style={{ flex: 1, minWidth: 140, justifyContent: 'center', padding: '10px 16px', fontSize: '0.85rem' }}
+                                                        onClick={(e) => triggerAdAndOpen(e, ep.downloadLinkFast)}
                                                     >
                                                         <Zap style={{ width: 15, height: 15 }} />
                                                         Fast Server
@@ -351,6 +411,7 @@ const MovieDetail = () => {
                                             rel="noopener noreferrer"
                                             className="btn-download-primary btn-ripple"
                                             style={{ width: '100%', justifyContent: 'center', padding: '16px 24px', fontSize: '1.05rem' }}
+                                            onClick={(e) => triggerAdAndOpen(e, movie.downloadLink || movie.movieLink)}
                                         >
                                             <Download style={{ width: 20, height: 20 }} />
                                             Download Movie
@@ -367,6 +428,7 @@ const MovieDetail = () => {
                                             rel="noopener noreferrer"
                                             className="btn-download-fast btn-ripple"
                                             style={{ width: '100%', justifyContent: 'center', padding: '16px 24px', fontSize: '1.05rem' }}
+                                            onClick={(e) => triggerAdAndOpen(e, movie.fastDownloadLink)}
                                         >
                                             <Zap style={{ width: 20, height: 20 }} />
                                             Download (Fast Server)
@@ -444,6 +506,8 @@ const MovieDetail = () => {
                 </motion.div>
             )}
 
+            {/* ── Leaderboard Ad — after related movies ── */}
+            {related.length > 0 && <ExternalAd />}
             {/* ── Trailer Modal ──────────────────────────── */}
             {showTrailer && (() => {
                 const src = movie.trailerLink || movie.movieLink || '';
